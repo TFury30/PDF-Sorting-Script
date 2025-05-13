@@ -1,4 +1,3 @@
----
 
 # PDF Sorting Script
 
@@ -10,7 +9,7 @@ This script automatically processes, sorts, and organizes PDF files based on the
 * Detect **unreadable PDFs** with no extractable text and log them separately.
 * Generate a **Table of Contents (index)** of all sorted PDFs.
 
-## Features:
+##  Features:
 
 * **Language Detection**: Automatically detects the language of a PDF using `langdetect`.
 * **Topic Detection**: Classifies PDFs into topics using **BERTopic** (based on their extracted text).
@@ -50,7 +49,7 @@ sentence-transformers
 tqdm
 ```
 
-## Installation:
+##  Installation:
 
 1. **Clone this repository**:
 
@@ -104,7 +103,7 @@ python sort_pdfs.py
   * `logs/duplicates.log` – Logs any duplicate PDFs based on content.
   * `logs/unreadable.log` – Logs PDFs that could not be parsed or have no extractable text.
 
-## Cleaning Up:
+##  Cleaning Up:
 
 If you need to delete the sorted PDFs and start fresh, simply remove the `sorted_pdfs/` folder:
 
@@ -114,7 +113,7 @@ rm -rf sorted_pdfs/
 
 You can also clean up log files if desired by deleting the `logs/` folder.
 
-## Example Output Structure:
+##  Example Output Structure:
 
 ```
 sorted_pdfs/
@@ -135,19 +134,19 @@ logs/
 └── unreadable.log
 ```
 
-## Folder Structure:
+##  Folder Structure:
 
 1. **`pdfs/`**: Place all your PDFs here for processing.
 2. **`sorted_pdfs/`**: This is where the script will move the sorted PDFs, categorized by **language** and **topic**.
 3. **`logs/`**: This directory will store all the logs (process, duplicates, unreadables).
 4. **`index.txt`**: The table of contents file listing all the PDFs sorted by language and topic.
 
-## Troubleshooting:
+##  Troubleshooting:
 
 * **If a PDF is unreadable**: Check the `logs/unreadable.log` to find which PDF couldn't be parsed. It might be corrupted or encrypted.
 * **If there are duplicate PDFs**: Check the `logs/duplicates.log` to see the paths of PDFs with the same content.
 
-## Contributing:
+##  Contributing:
 
 If you'd like to contribute to this project:
 
@@ -159,9 +158,10 @@ If you'd like to contribute to this project:
 
 ---
 
-### License:
+###  License:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
+
 
