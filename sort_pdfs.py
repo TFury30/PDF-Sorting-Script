@@ -3,6 +3,7 @@ import shutil
 import logging
 import hashlib
 import json
+import csv
 import pdfplumber
 from langdetect import detect
 from concurrent.futures import ProcessPoolExecutor
@@ -14,8 +15,10 @@ from tqdm import tqdm
 SOURCE_FOLDER = "./pdfs"
 OUTPUT_FOLDER = "./sorted_pdfs"
 LOG_FOLDER = os.path.join(OUTPUT_FOLDER, "logs")
-INDEX_FILE = os.path.join(OUTPUT_FOLDER, "index.txt")
+INDEX_FILE_TXT = os.path.join(OUTPUT_FOLDER, "index.txt")
+INDEX_FILE_CSV = os.path.join(OUTPUT_FOLDER, "index.csv")
 HASH_CACHE_FILE = os.path.join(LOG_FOLDER, "hashes.json")
+RESULTS_CACHE_FILE = os.path.join(LOG_FOLDER, "results_cache.json")
 SAMPLE_PAGES = 10
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 MAX_WORKERS = os.cpu_count() or 4
@@ -48,11 +51,11 @@ def extract_text(pdf_path, max_pages=SAMPLE_PAGES):
     try:
         with pdfplumber.open(pdf_path) as pdf:
             total_pages = len(pdf.pages)
-            front = pdf.pages[:max_pages // 2]
-            back = pdf.pages[-(max_pages // 2):] if total_pages > max_pages // 2 else []
-            pages = front + back
-            for page in pages:
-                page_text = page.extract_text()
+            # First, middle, last sampling
+            segments = [0, total_pages // 2, total_pages - 1]
+            segments = list(set(i for i in segments if 0 <= i < total_pages))
+            for i in segments:
+                page_text = pdf.pages[i].extract_text()
                 if page_text:
                     text += page_text + " "
     except Exception as e:
@@ -95,10 +98,15 @@ def move_pdf(path, language, topic, used_paths):
     os.makedirs(dest_folder, exist_ok=True)
     final_path = get_unique_path(dest_folder, file_name, used_paths)
     shutil.copy(path, final_path)
+
+    # Write bookmark
+    with open(os.path.join(dest_folder, "bookmarks.txt"), "a", encoding="utf-8") as f:
+        f.write(file_name + "\n")
+
     return final_path
 
 def write_index(entries):
-    with open(INDEX_FILE, "w", encoding="utf-8") as f:
+    with open(INDEX_FILE_TXT, "w", encoding="utf-8") as f:
         f.write("\U0001F4DA SORTED PDF INDEX\n")
         f.write("\u2500" * 46 + "\n\n")
         for entry in entries:
@@ -106,6 +114,11 @@ def write_index(entries):
             f.write(f"Language: {entry['language']}\n")
             f.write(f"Topic: {entry['topic']}\n")
             f.write(f"Path: {entry['path']}\n\n")
+
+    with open(INDEX_FILE_CSV, "w", encoding="utf-8", newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=["file", "language", "topic", "path"])
+        writer.writeheader()
+        writer.writerows(entries)
 
 def load_hash_cache():
     if os.path.exists(HASH_CACHE_FILE):
@@ -117,6 +130,16 @@ def save_hash_cache(hashes):
     with open(HASH_CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(list(hashes), f)
 
+def load_results_cache():
+    if os.path.exists(RESULTS_CACHE_FILE):
+        with open(RESULTS_CACHE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def save_results_cache(results):
+    with open(RESULTS_CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(results, f)
+
 # ---------- Main Script ----------
 def main():
     logging.info("Starting PDF sorting pipeline...")
@@ -125,13 +148,27 @@ def main():
     logging.info(f"Found {len(pdf_paths)} PDFs to process.")
 
     seen_hashes = load_hash_cache()
+    results_cache = load_results_cache()
     index_entries = []
     used_paths = set()
 
+    to_process = [p for p in pdf_paths if os.path.basename(p) not in results_cache]
     with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        results = list(tqdm(executor.map(process_pdf, pdf_paths), total=len(pdf_paths)))
+        results = list(tqdm(executor.map(process_pdf, to_process), total=len(to_process)))
 
-    paths, texts, languages, hashes = zip(*results)
+    for i, path in enumerate(to_process):
+        results_cache[os.path.basename(path)] = {
+            "text": results[i][1],
+            "language": results[i][2],
+            "hash": results[i][3]
+        }
+
+    save_results_cache(results_cache)
+
+    paths, texts, languages, hashes = zip(*[
+        (p, r["text"], r["language"], r["hash"])
+        for p, r in zip(pdf_paths, [results_cache[os.path.basename(p)] for p in pdf_paths])
+    ])
 
     logging.info("Running topic modeling with BERTopic...")
     embedding_model = SentenceTransformer(EMBEDDING_MODEL)
@@ -164,7 +201,7 @@ def main():
 
     write_index(index_entries)
     save_hash_cache(seen_hashes)
-    logging.info(f"Finished. Index written to: {INDEX_FILE}")
+    logging.info(f"Finished. Index written to: {INDEX_FILE_TXT} & {INDEX_FILE_CSV}")
     logging.info(f"Logs saved in: {LOG_FOLDER}")
 
 if __name__ == "__main__":
